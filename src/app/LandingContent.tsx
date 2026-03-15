@@ -3,12 +3,16 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, PenLine, Sparkles, FolderOpen, Wand2 } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { User } from '@supabase/supabase-js'
 
 export default function LandingContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [user, setUser] = useState<User | null>(null)
+  const supabase = createClient()
 
   useEffect(() => {
     const error = searchParams.get('error')
@@ -23,7 +27,24 @@ export default function LandingContent() {
 
       router.replace(`/login?${params.toString()}`)
     }
-  }, [searchParams, router])
+
+    // Initial user fetch
+    supabase.auth.getUser().then(({ data: { user } }) => {
+        setUser(user)
+    })
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [searchParams, router, supabase.auth])
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.replace('/')
+  }
 
   return (
     <div className="min-h-screen bg-[#f8f6f3] text-foreground flex flex-col relative overflow-hidden font-sans">
@@ -48,13 +69,27 @@ export default function LandingContent() {
           </div>
           <span className="font-bold text-2xl tracking-tight">AI Notes Saver</span>
         </Link>
-        <nav className="ml-auto flex gap-6 sm:gap-10">
+        <nav className="ml-auto flex gap-6 sm:gap-10 items-center">
           <Link className="text-sm font-bold hover:opacity-70 transition-opacity" href="#features">
             Features
           </Link>
-          <Link className="text-sm font-bold hover:opacity-70 transition-opacity" href="/login">
-            Sign In
-          </Link>
+          {user ? (
+            <>
+              <Link className="text-sm font-bold hover:opacity-70 transition-opacity" href="/dashboard">
+                Dashboard
+              </Link>
+              <button 
+                onClick={handleSignOut}
+                className="text-sm font-bold hover:opacity-70 transition-opacity text-red-500"
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <Link className="text-sm font-bold hover:opacity-70 transition-opacity" href="/login">
+              Sign In
+            </Link>
+          )}
         </nav>
       </header>
 
@@ -71,16 +106,18 @@ export default function LandingContent() {
             </div>
             
             <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-4">
-              <Link href="/login">
+              <Link href={user ? "/dashboard" : "/login"}>
                 <Button variant="sketch" className="h-14 px-10 text-xl group">
                   Take Notes <PenLine className="ml-3 h-6 w-6 group-hover:rotate-12 transition-transform" />
                 </Button>
               </Link>
-              <Link href="/login">
-                <Button variant="sketch-outline" className="h-14 px-10 text-xl group">
-                  Get Started <Sparkles className="ml-3 h-6 w-6 group-hover:scale-110 transition-transform" />
-                </Button>
-              </Link>
+              {!user && (
+                <Link href="/login">
+                  <Button variant="sketch-outline" className="h-14 px-10 text-xl group">
+                    Get Started <Sparkles className="ml-3 h-6 w-6 group-hover:scale-110 transition-transform" />
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
         </section>
